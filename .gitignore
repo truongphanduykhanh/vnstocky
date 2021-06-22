@@ -1,1 +1,5 @@
+.vscode
+*.pyc
+*.html
 *.csv
+*.xlsx
