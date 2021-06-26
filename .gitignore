@@ -3,4 +3,5 @@
 *.html
 *.csv
 *.xlsx
+*.ipynb
 credentials.py

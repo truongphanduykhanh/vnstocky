@@ -1,6 +1,9 @@
-params = {
-    'path': 'data/reportfinance/TN1_reportfinance.csv',
-    'start_bs': 'Tài sản ngắn hạn###Current Assets',
-    'end_bs': 'TỔNG CỘNG NGUỒN VỐN ###TOTAL EQUITY',
-    'elements_col': 'Feat_Month'
-}
+class Params:
+    ticker = None
+    input_path = f'data/reportfinance/{ticker}_reportfinance.csv'
+    start_bs = 'Tài sản ngắn hạn###Current Assets'
+    end_bs = 'TỔNG CỘNG NGUỒN VỐN ###TOTAL EQUITY'
+    ticker_col = 'Ticker'
+    time_col = 'Feat_Month'
+    output_path = 'data/bs.csv'
+    index = False

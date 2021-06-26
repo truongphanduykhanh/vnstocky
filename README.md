@@ -1,1 +1,1 @@
-# project
+# This project is to predict stock price movement
