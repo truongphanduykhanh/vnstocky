@@ -5,3 +5,4 @@
 *.xlsx
 *.ipynb
 credentials.py
+test.py

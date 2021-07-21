@@ -45,7 +45,7 @@ def _add_mths(mths, no_mths=1, fmt='%Y%m'):
 def get_qtr_cols(df):
     _yr_cols, qtr_cols = _get_yr_qtr_cols(df)
     df_qtr = df.loc[qtr_cols, :]
-    df_qtr.index = _add_mths(df_qtr.index)
+    # df_qtr.index = _add_mths(df_qtr.index)
     return df_qtr
 
 

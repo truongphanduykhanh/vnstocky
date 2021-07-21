@@ -5,7 +5,8 @@ import feat_util
 
 class Finance:
 
-    def __init__(self):
+    def __init__(self, params):
+        self.params = params
         self.input = None
         self.bs = None
         self.bs_qtr = None
@@ -43,3 +44,9 @@ class Finance:
 
     def export_data(self, output_path, **kwargs):
         self.bs_qtr.to_csv(output_path, index=False)
+
+
+class FinanceRate:
+
+    def __init__(self) -> None:
+        pass
