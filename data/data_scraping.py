@@ -1,7 +1,7 @@
 import os
 
-from bs4 import BeautifulSoup
 import requests
+from bs4 import BeautifulSoup
 
 import credentials
 
@@ -16,11 +16,11 @@ def create_session(credentials):
     Parameters:
     ----------
     credentials: a python script
-        object 'name' and object 'password' should exist in the python script
+        object 'username' and 'password' should exist in the python script
 
     Returns:
     -------
-    A login session
+    a login session
     '''
     login_url = 'https://www.cophieu68.vn/account/login.php'
     payload = {
@@ -36,16 +36,16 @@ def create_session(credentials):
 
 def get_html_text(session):
     '''
-    A login session on the website
+    Get html in text format
 
     Parameters:
     ----------
-    source: str
-        Name of the source website. Currently, the only option is 'cophieu68'.
+    session:
+        a login session on the website
 
     Returns:
     -------
-    HTML in string format of the 'export' page
+    html in string format of the 'export' page
     '''
     export_url = 'https://www.cophieu68.vn/export.php'
     html_text = session.get(export_url, verify=False).text
@@ -62,7 +62,7 @@ def get_td_tags(html_text):
 
     Returns:
     -------
-    List of tg tags
+    list of tg tags
     '''
     soup = BeautifulSoup(html_text, 'lxml')
     tds = soup.find_all('td', class_="td_bottom3 td_bg2", text='Download')
@@ -75,7 +75,7 @@ def get_file_url(td):
 
     Parameters:
     ----------
-    td: HTML tg tag
+    td: html tg tag
         <td class="td_bottom3 td_bg2"
         align="center"><a href="export/events.php?id=A32"
         title="Download Lịch sự kiện" target="_blank">Download</a></td>
@@ -122,7 +122,7 @@ def download_file(url, encoding):
 
     Returns:
     -------
-    Save csv file to correct folder
+    save csv file to correct folder
         Ex: https://www.cophieu68.vn/export/events.php?id=A32
     '''
     ticker = url.split('/')[-1].split('=')[-1]
