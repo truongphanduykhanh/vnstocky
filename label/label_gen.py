@@ -38,20 +38,20 @@ def get_last_dates(input_date, periods=40, gap=3, input_format='%Y%m%d', out_for
     Parameters
     ----------
     input_date : str
-        input date. Ex: '20210731'
+        Input date. Ex: '20210731'
     periods : int
-        number of periods wanted to look back. Ex: 40
+        Number of periods wanted to look back. Ex: 40
     gap : int
-        gap in months between periods. Ex: 3
+        Gap in months between periods. Ex: 3
     input_format : str
-        format of input date. Ex: '%Y%m%d'
+        Format of input date. Ex: '%Y%m%d'
     output_format : str
-        format of output date. Ex: '%Y%m%d'
+        Format of output date. Ex: '%Y%m%d'
 
     Returns
     -------
     list of str
-        list of last dates. Ex: ['20210731', '20210430', '20210131']
+        List of last dates. Ex: ['20210731', '20210430', '20210131']
     '''
     input_date = datetime.strptime(str(input_date), input_format)
     dates = []
