@@ -1,31 +1,67 @@
-import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
+
 from dateutil.relativedelta import relativedelta
+import numpy as np
+import pandas as pd
 
 
-tickers = ['TCB', 'CTG', 'VCB']
-paths = []
-for ticker in tickers:
-    paths.append(f'data/excelfull/{ticker}_excelfull.csv')
+def get_raw(tickers):
+    '''
+    Get raw price data
+
+    Parameters:
+    ----------
+    tickers: list of strings
+        List of tickers. Ex: ['TCB', 'CTG', 'GAS']
+
+    Returns:
+    -------
+    pandas.DataFrame
+        Data frame of raw prices
+    '''
+    paths = []
+    for ticker in tickers:
+        paths.append(f'data/excelfull/{ticker}_excelfull.csv')
+
+    prices = []
+    for path in paths:
+        price = pd.read_csv(path)
+        prices.append(price)
+    prices = pd.concat(prices).reset_index(drop=True)
+    return prices
 
 
-prices = []
-for path in paths:
-    price = pd.read_csv(path)
-    prices.append(price)
-prices = pd.concat(prices).reset_index(drop=True)
+def get_last_dates(input_date, periods=40, gap=3, input_format='%Y%m%d', out_format='%Y%m%d'):
+    '''
+    Get list of last dates of months in every periods month
 
+    Parameters
+    ----------
+    input_date : str
+        input date. Ex: '20210731'
+    periods : int
+        number of periods wanted to look back. Ex: 40
+    gap : int
+        gap in months between periods. Ex: 3
+    input_format : str
+        format of input date. Ex: '%Y%m%d'
+    output_format : str
+        format of output date. Ex: '%Y%m%d'
 
-def get_months(start, end, period=3, format='%Y%m'):
-    start = datetime.strptime(str(start), format)
-    end = datetime.strptime(str(end), format)
-    month = start
-    months = [month.strftime(format)]
-    while month + relativedelta(months=+period) <= end:
-        month += relativedelta(months=+period)
-        months.append(month.strftime(format))
-    return months
+    Returns
+    -------
+    list of str
+        list of last dates. Ex: ['20210731', '20210430', '20210131']
+    '''
+    input_date = datetime.strptime(str(input_date), input_format)
+    dates = []
+    for i in range(periods):
+        date = input_date - relativedelta(months=i * gap)
+        date = date.replace(day=28) + relativedelta(days=4)
+        date = date - relativedelta(days=date.day)
+        date = date.strftime(out_format)
+        dates.append(date)
+    return dates
 
 
 def put_months_to_groups(months, groups, look_back=3, format='%Y%m'):

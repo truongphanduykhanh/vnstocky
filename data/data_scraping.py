@@ -90,7 +90,7 @@ def get_file_url(td):
     return url
 
 
-# create new four folders under data/, if not existing
+# create new four folders under /data/, if not existing
 for table in ['events', 'excelfull', 'indexfinance', 'reportfinance']:
     data_path = os.path.join(os.getcwd(), 'data', table)
     if not os.path.isdir(data_path):
