@@ -2,7 +2,7 @@
 This script is to generate label for stock trading.
 '''
 __author__ = 'Khanh Truong'
-__date__ = '2021-07-24'
+__date__ = '2021-07-25'
 
 import os
 from datetime import datetime, timedelta
@@ -10,6 +10,27 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import numpy as np
 import pandas as pd
+
+
+def get_tickers(folder):
+    '''
+    Get all tickers in a folder
+
+    Parameters
+    ----------
+    folder : str
+        path to folder wanted to get tickers. Ex: '../data/excelfull'
+
+    Returns
+    -------
+    list of str
+        List of tickers. Ex: ['A32', 'AAM', 'AAT', ...]
+    '''
+    file_names = pd.Series(os.listdir(folder))
+    file_names = file_names.sort_values().str.split('_')
+    tickers = [file_name[0] for file_name in file_names]
+    tickers = [ticker for ticker in tickers if len(ticker) == 3]
+    return tickers
 
 
 def get_raw(tickers):
@@ -172,27 +193,6 @@ def get_label(
         .reset_index(drop=True)
     )
     return label_df
-
-
-def get_tickers(folder):
-    '''
-    Get all tickers in a folder
-
-    Parameters
-    ----------
-    folder : str
-        path to folder wanted to get tickers. Ex: '../data/excelfull'
-
-    Returns
-    -------
-    list of str
-        List of tickers. Ex: ['A32', 'AAM', 'AAT', ...]
-    '''
-    file_names = pd.Series(os.listdir(folder))
-    file_names = file_names.sort_values().str.split('_')
-    tickers = [file_name[0] for file_name in file_names]
-    tickers = [ticker for ticker in tickers if len(ticker) == 3]
-    return tickers
 
 
 if __name__ == '__main__':
