@@ -1,9 +1,16 @@
+'''
+This script is to scrape raw data from cophieu68.vn.
+'''
+__author__ = 'Khanh Truong'
+__date__ = '2021-07-24'
+
+
 import os
 
 import requests
 from bs4 import BeautifulSoup
 
-import credentials
+import __credentials
 
 requests.packages.urllib3.disable_warnings(
     requests.packages.urllib3.exceptions.InsecureRequestWarning)
@@ -16,7 +23,7 @@ def create_session(credentials):
     Parameters:
     ----------
     credentials: a python script
-        object 'username' and 'password' should exist in the python script
+        Object 'username' and 'password' should exist in the python script
 
     Returns:
     -------
@@ -41,7 +48,7 @@ def get_html_text(session):
     Parameters:
     ----------
     session:
-        a login session on the website
+        A login session on the website
 
     Returns:
     -------
@@ -75,7 +82,7 @@ def get_file_url(td):
 
     Parameters:
     ----------
-    td: html tg tag
+    td: html tg tag. Ex:
         <td class="td_bottom3 td_bg2"
         align="center"><a href="export/events.php?id=A32"
         title="Download Lịch sự kiện" target="_blank">Download</a></td>
@@ -98,7 +105,7 @@ for table in ['events', 'excelfull', 'indexfinance', 'reportfinance']:
 
 
 # generate urls
-session = create_session(credentials)
+session = create_session(__credentials)
 html_text = get_html_text(session)
 tds = get_td_tags(html_text)
 urls = list(map(get_file_url, tds))

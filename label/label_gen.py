@@ -1,3 +1,10 @@
+'''
+This script is to generate label for stock trading.
+'''
+__author__ = 'Khanh Truong'
+__date__ = '2021-07-24'
+
+
 from datetime import datetime, timedelta
 
 from dateutil.relativedelta import relativedelta
@@ -21,7 +28,7 @@ def get_raw(tickers):
     '''
     paths = []
     for ticker in tickers:
-        paths.append(f'data/excelfull/{ticker}_excelfull.csv')
+        paths.append(f'../data/excelfull/{ticker}_excelfull.csv')
 
     prices = []
     for path in paths:
@@ -31,32 +38,32 @@ def get_raw(tickers):
     return prices
 
 
-def get_last_dates(input_date, periods=40, gap=3, input_format='%Y%m%d', out_format='%Y%m%d'):
+def get_last_dates(last_date, gap=3, periods=100, input_format='%Y%m%d', out_format='%Y%m%d'):
     '''
     Get list of last dates of months in every periods month
 
     Parameters
     ----------
-    input_date : str
-        Input date. Ex: '20210731'
-    periods : int
-        Number of periods wanted to look back. Ex: 40
+    last_date : str
+        Input last date. Ex: '20210731'
     gap : int
         Gap in months between periods. Ex: 3
+    periods : int
+        Number of periods wanted to look back. Ex: 100
     input_format : str
         Format of input date. Ex: '%Y%m%d'
     output_format : str
-        Format of output date. Ex: '%Y%m%d'
+        Format of output dates. Ex: '%Y%m%d'
 
     Returns
     -------
     list of str
-        List of last dates. Ex: ['20210731', '20210430', '20210131']
+        List of last dates. Ex: ['20210731', '20210430', '20210131', ...]
     '''
-    input_date = datetime.strptime(str(input_date), input_format)
+    last_date = datetime.strptime(str(last_date), input_format)
     dates = []
     for i in range(periods):
-        date = input_date - relativedelta(months=i * gap)
+        date = last_date - relativedelta(months=i * gap)
         date = date.replace(day=28) + relativedelta(days=4)
         date = date - relativedelta(days=date.day)
         date = date.strftime(out_format)
@@ -64,55 +71,60 @@ def get_last_dates(input_date, periods=40, gap=3, input_format='%Y%m%d', out_for
     return dates
 
 
-def put_months_to_groups(months, groups, look_back=3, format='%Y%m'):
-    groups.sort()
-    months_to_groups = pd.Series([np.nan] * len(months))
-    for group in groups:
-        gap = pd.to_datetime(group, format=format) - pd.to_datetime(months, format=format)
-        gap = gap.dt.days
-        within_look_back = [0 <= x <= 30 * (look_back - 0.5) for x in gap]
-        months_to_groups[within_look_back] = months_to_groups[within_look_back].fillna(group)
-    return months_to_groups
+def group_dates(input_dates, last_date, gap=3):
+    '''
+    Get list of last dates of months in every periods month
+
+    Parameters
+    ----------
+    input_dates : list or series of str
+        Input dates. Ex: ['20210731', '20210730', '20210729', ...]
+    last_date : str
+        Last date that wanted to group to. Ex: '20210731'
+    gap : int
+        Gap in months between periods. Ex: 3
+
+    Returns
+    -------
+    list of str
+        List of last dates. Ex: ['20210731', '20210731', '20210731', ...]
+    '''
+    # covert string inputs to integers
+    input_dates = [int(input_date) for input_date in input_dates]
+    last_dates = get_last_dates(last_date, gap=gap)
+    last_dates = [int(last_date) for last_date in last_dates]
+    # group input dates to corresponding last dates
+    # idea: get nearest (larger) last date of every input date
+    res = np.subtract.outer(input_dates, last_dates)
+    res_neg = np.where(res > 0, -np.inf, res)
+    res_argmax = np.argmax(res_neg, axis=1)
+    res_dates = [last_dates[index] for index in res_argmax]
+    return res_dates
 
 
-def get_feat_months(label_months, format='%Y%m', look_back=3):
-    feat_months = pd.to_datetime(label_months, format=format) - timedelta(days=30 * (look_back - 0.5))
-    feat_months = feat_months.dt.to_period('M').dt.strftime(format)
-    return feat_months
-
-
-label_months = get_months('200001', '202201', period=3)
-feat_months = get_months('199910', '202110', period=3)
-
-
-label = (
-    prices
-    .assign(Trading_Month=lambda df: df['<DTYYYYMMDD>'].astype(str).str.slice(0, 6))
-    .assign(Label_Month=lambda df: put_months_to_groups(df['Trading_Month'], label_months, look_back=3))
-    .groupby(['<Ticker>', 'Label_Month'])
-    .agg({'<CloseFixed>': 'mean'})
-    .reset_index()
-    .assign(Feat_Month=lambda df: get_feat_months(df['Label_Month']))
-    .rename(columns={'<Ticker>': 'Ticker', '<CloseFixed>': 'Label_Price'})
-)
-
-
-feat = (
-    prices
-    .assign(Trading_Month=lambda df: df['<DTYYYYMMDD>'].astype(str).str.slice(0, 6))
-    .assign(Feat_Month=lambda df: put_months_to_groups(df['Trading_Month'], feat_months, look_back=3))
-    .groupby(['<Ticker>', 'Feat_Month'])
-    .agg({'<CloseFixed>': 'mean'})
-    .reset_index()
-    .rename(columns={'<Ticker>': 'Ticker', '<CloseFixed>': 'Feat_Price'})
-)
-
-
-label_final = (
-    label
-    .merge(feat, how='left', on=['Ticker', 'Feat_Month'])
-    .assign(Return=lambda df: df['Label_Price'] / df['Feat_Price'] - 1)
-    .loc[:, ['Ticker', 'Label_Month', 'Feat_Month', 'Return']]
-)
-
-label_final.to_csv('label.csv', index=False)
+def get_label(
+    df,
+    last_date='20210731',
+    gap=3,
+    id_col='Ticker',
+    label_time_col='Label_Time',
+    feat_time_col='Feat_Time',
+    label_col='Return'
+):
+    df = (
+        df
+        .rename(columns={'<Ticker>': id_col})
+        .assign(**{label_time_col: group_dates(df['<DTYYYYMMDD>'], last_date=last_date, gap=gap)})
+        .groupby([id_col, label_time_col])
+        .agg({'<CloseFixed>': 'mean'})
+        .reset_index()
+        .rename(columns={'<CloseFixed>': 'MeanCloseFixed'})
+        .sort_values([id_col, label_time_col], ascending=[True, False])
+        .assign(MeanCloseFixedLag=lambda df: df.groupby(id_col)['MeanCloseFixed'].shift(-1))
+        .assign(**{label_col: lambda df: df['MeanCloseFixed'] / df['MeanCloseFixedLag'] - 1})
+        .assign(**{feat_time_col: lambda df: df.groupby(id_col)[label_time_col].shift(-1)})
+        .dropna(subset=[feat_time_col])
+        .astype({feat_time_col: int})
+        .loc[:, [id_col, label_time_col, feat_time_col, label_col]]
+    )
+    return df
