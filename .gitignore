@@ -4,5 +4,5 @@
 *.csv
 *.xlsx
 *.ipynb
-credentials.py
+__credentials.py
 test.py
