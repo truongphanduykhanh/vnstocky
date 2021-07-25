@@ -4,7 +4,7 @@ This script is to generate label for stock trading.
 __author__ = 'Khanh Truong'
 __date__ = '2021-07-24'
 
-
+import os
 from datetime import datetime, timedelta
 
 from dateutil.relativedelta import relativedelta
@@ -38,7 +38,13 @@ def get_raw(tickers):
     return prices
 
 
-def get_last_dates(last_date, gap=3, periods=100, input_format='%Y%m%d', out_format='%Y%m%d'):
+def get_last_dates(
+    last_date,
+    gap=3,
+    periods=100,
+    input_format='%Y%m%d',
+    out_format='%Y%m%d'
+):
     '''
     Get list of last dates of months in every periods month
 
@@ -103,28 +109,94 @@ def group_dates(input_dates, last_date, gap=3):
 
 
 def get_label(
-    df,
-    last_date='20210731',
+    raw_df,
+    last_date,
     gap=3,
     id_col='Ticker',
     label_time_col='Label_Time',
     feat_time_col='Feat_Time',
     label_col='Return'
 ):
-    df = (
-        df
+    '''
+    Get label data frame from raw data.
+
+    Parameters
+    ----------
+    raw_df : pandas.DataFrame
+        Raw input data having ['<Ticker>', '<DTYYYYMMDD>', '<CloseFixed>']
+    last_date : str
+        Last date that wanted to group to. Ex: '20210731'
+    gap : int
+        Gap in months between periods. Ex: 3
+    id_col : str
+        Column name of tickers. Ex: 'Ticker'
+    label_time_col : str
+        Column name of label time. Ex: 'Label_Time'
+    feat_time_col : str
+        Column name of feature time. Ex: 'Feat_Time'
+    label_col : str
+        Column name of label. Ex: 'Return'
+
+    Returns
+    -------
+    pandas.DataFrame
+        Data frame of label. Ex. of column names:
+        ['Ticker', 'Label_Time', 'Feat_Time', 'Return']
+    '''
+    label_df = (
+        raw_df
         .rename(columns={'<Ticker>': id_col})
-        .assign(**{label_time_col: group_dates(df['<DTYYYYMMDD>'], last_date=last_date, gap=gap)})
+        # create group last dates. Ex: '20210710' -> '20210731'
+        .assign(**{label_time_col: lambda df: (
+            group_dates(df['<DTYYYYMMDD>'], last_date=last_date, gap=gap))})
+        # calculate mean closing prices
         .groupby([id_col, label_time_col])
         .agg({'<CloseFixed>': 'mean'})
         .reset_index()
         .rename(columns={'<CloseFixed>': 'MeanCloseFixed'})
+        # add lag prices columne (denominator column)
         .sort_values([id_col, label_time_col], ascending=[True, False])
-        .assign(MeanCloseFixedLag=lambda df: df.groupby(id_col)['MeanCloseFixed'].shift(-1))
-        .assign(**{label_col: lambda df: df['MeanCloseFixed'] / df['MeanCloseFixedLag'] - 1})
-        .assign(**{feat_time_col: lambda df: df.groupby(id_col)[label_time_col].shift(-1)})
-        .dropna(subset=[feat_time_col])
-        .astype({feat_time_col: int})
+        .assign(MeanCloseFixedLag=lambda df: (
+            df.groupby(id_col)['MeanCloseFixed'].shift(-1)))
+        # calculate return
+        .assign(**{label_col: lambda df: (
+            df['MeanCloseFixed'] / df['MeanCloseFixedLag'] - 1)})
+        # add feature time column for later reference
+        .assign(**{feat_time_col: lambda df: (
+            df.groupby(id_col)[label_time_col].shift(-1))})
         .loc[:, [id_col, label_time_col, feat_time_col, label_col]]
+        .dropna()
+        # clean data frame
+        .astype({label_time_col: int, feat_time_col: int})
+        .astype({label_time_col: str, feat_time_col: str})
+        .reset_index(drop=True)
     )
-    return df
+    return label_df
+
+
+def get_tickers(folder):
+    '''
+    Get all tickers in a folder
+
+    Parameters
+    ----------
+    folder : str
+        path to folder wanted to get tickers. Ex: '../data/excelfull'
+
+    Returns
+    -------
+    list of str
+        List of tickers. Ex: ['A32', 'AAM', 'AAT', ...]
+    '''
+    file_names = pd.Series(os.listdir(folder))
+    file_names = file_names.sort_values().str.split('_')
+    tickers = [file_name[0] for file_name in file_names]
+    tickers = [ticker for ticker in tickers if len(ticker) == 3]
+    return tickers
+
+
+if __name__ == '__main__':
+    tickers = get_tickers('../data/excelfull')
+    raw_df = get_raw(tickers)
+    label_df = get_label(raw_df, last_date='20210731', gap=3)
+    label_df.to_csv('label.csv', index=False)
