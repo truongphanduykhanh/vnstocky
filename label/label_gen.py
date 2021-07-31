@@ -5,7 +5,7 @@ __author__ = 'Khanh Truong'
 __date__ = '2021-07-25'
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from dateutil.relativedelta import relativedelta
 import numpy as np
@@ -19,7 +19,7 @@ def get_tickers(folder):
     Parameters
     ----------
     folder : str
-        path to folder wanted to get tickers. Ex: '../data/excelfull'
+        Path to folder wanted to get tickers. Ex: '../data/excelfull'
 
     Returns
     -------
