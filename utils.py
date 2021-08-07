@@ -1,3 +1,27 @@
+import datetime
+from dateutil.relativedelta import relativedelta
+
+
+def get_hours_minutes_seconds(timedelta):
+    '''
+    Convert time delta to hours, minutes, seconds
+
+    Parameters
+    ----------
+    timedelta : datetime.timedelta
+        time delta between two time points. Ex: datetime.timedelta(0, 9, 494935)
+
+    Returns
+    -------
+    three integer objects corresponding to number of hours, minutes and seconds
+    '''
+    total_seconds = timedelta.seconds
+    hours = total_seconds // 3600
+    minutes = (total_seconds - (hours * 3600)) // 60
+    seconds = total_seconds - (hours * 3600) - (minutes * 60)
+    return hours, minutes, seconds
+
+
 def get_last_dates(input_time,
                    input_format,
                    output_format='%Y%m%d',
@@ -26,7 +50,7 @@ def get_last_dates(input_time,
     '''
     if mode not in ['month', 'week']:
         raise ValueError('mode should be either "month" or "week".')
-    
+
     input_time = datetime.datetime.strptime(input_time, input_format)
     dates = []
     if mode == 'month':

@@ -4,5 +4,6 @@
 *.csv
 *.xlsx
 *.ipynb
+*.ipynb_checkpoints
 __credentials.py
 test.py
