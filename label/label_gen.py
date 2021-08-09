@@ -106,7 +106,7 @@ class Label:
         return dates
 
     @staticmethod
-    def group_dates(input_dates, last_date, gap=3):
+    def group_dates(input_dates, last_date, term=1, gap=3):
         '''
         Get list of last dates of months in every periods month
 
@@ -116,6 +116,9 @@ class Label:
             Input dates. Ex: ['20210731', '20210730', '20210729', ...]
         last_date : str
             Last date that wanted to group to. Ex: '20210731'
+        term : int
+            Term in months from last_date. Ex: 1
+            Term must not greater than gap.
         gap : int
             Gap in months between periods. Ex: 3
 
@@ -124,17 +127,54 @@ class Label:
         list of str
             List of last dates. Ex: ['20210731', '20210731', '20210731', ...]
         '''
-        # covert string inputs to integers
-        input_dates = [int(input_date) for input_date in input_dates]
+        # # covert string inputs to integers
+        # input_dates = [int(input_date) for input_date in input_dates]
+        # last_dates = Label.get_last_dates(last_date, gap=gap)
+        # last_dates = [int(last_date) for last_date in last_dates]
+
+        # # group input dates to corresponding last dates
+        # # idea: get nearest (larger) last date of every input date
+        # subtract = np.subtract.outer(input_dates, last_dates)
+        # subtract_neg = np.where(subtract > 0, -np.inf, subtract)
+        # subtract_argmax = np.argmax(subtract_neg, axis=1)
+        # group_dates = [last_dates[index] for index in subtract_argmax]
+
+        # # some input dates greater than last date, replace them by na
+        # dates_greater_last_date = np.array(input_dates) > int(last_date)
+        # dates_greater_last_date_index = np.where(dates_greater_last_date)[0]
+        # group_dates = [str(group_date) for group_date in group_dates]
+        # group_dates = pd.Series(group_dates)
+        # group_dates[dates_greater_last_date_index] = np.nan
+        # group_dates = list(group_dates)
+        # return group_dates
+
+        # covert input dates to datetime64[D]
+        input_dates = [datetime.strptime(str(input_date), '%Y%m%d') for input_date in input_dates]
+        input_dates = [datetime.strftime(input_date, '%Y-%m-%d') for input_date in input_dates]
+        input_dates = np.array(input_dates, dtype='datetime64[D]')
+
+        # covert last dates to datetime64[D]
         last_dates = Label.get_last_dates(last_date, gap=gap)
-        last_dates = [int(last_date) for last_date in last_dates]
-        # group input dates to corresponding last dates
-        # idea: get nearest (larger) last date of every input date
-        res = np.subtract.outer(input_dates, last_dates)
-        res_neg = np.where(res > 0, -np.inf, res)
-        res_argmax = np.argmax(res_neg, axis=1)
-        res_dates = [last_dates[index] for index in res_argmax]
-        return res_dates
+        last_dates = [datetime.strptime(str(last_date), '%Y%m%d') for last_date in last_dates]
+        last_dates = [datetime.strftime(last_date, '%Y-%m-%d') for last_date in last_dates]
+        last_dates = np.array(last_dates, dtype='datetime64[D]')
+
+        # calculate gap between last dates and input dates
+        # the output is an 2D array whose shape is len(input_dates) x len(last_dates)
+        day_from_last_to_input = np.subtract.outer(last_dates, input_dates)
+        day_from_last_to_input = np.array(day_from_last_to_input, dtype='int')
+
+        # replace any gap between 0 and 30 days by the corresponding last date
+        # otherwise, replace by 0 (later, the array will be summed by axis=0)
+        for i, last_date in enumerate(last_dates):
+            condition = (0 <= day_from_last_to_input[i]) & (day_from_last_to_input[i] < term * 30)
+            day_from_last_to_input[i][condition] = int(str(last_date).replace('-', ''))
+            day_from_last_to_input[i][~condition] = 0
+
+        # sum the array
+        group_dates = np.sum(day_from_last_to_input, axis=0)
+        group_dates = [str(group_date) if group_date != 0 else np.nan for group_date in group_dates]
+        return group_dates
 
     def get_label(
         self,
@@ -207,7 +247,7 @@ class Label:
         self.label_df = label_df
         return self
 
-    def export(self, path='label1.csv'):
+    def export(self, path='label.csv'):
         self.label_df.to_csv(path, index=False)
 
 
