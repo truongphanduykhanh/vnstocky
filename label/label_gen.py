@@ -118,7 +118,7 @@ class Label:
             Last date that wanted to group to. Ex: '20210731'
         term : int
             Term in months from last_date. Ex: 1
-            Term must not greater than gap.
+            Term must not be greater than gap.
         gap : int
             Gap in months between periods. Ex: 3
 
@@ -127,27 +127,6 @@ class Label:
         list of str
             List of last dates. Ex: ['20210731', '20210731', '20210731', ...]
         '''
-        # # covert string inputs to integers
-        # input_dates = [int(input_date) for input_date in input_dates]
-        # last_dates = Label.get_last_dates(last_date, gap=gap)
-        # last_dates = [int(last_date) for last_date in last_dates]
-
-        # # group input dates to corresponding last dates
-        # # idea: get nearest (larger) last date of every input date
-        # subtract = np.subtract.outer(input_dates, last_dates)
-        # subtract_neg = np.where(subtract > 0, -np.inf, subtract)
-        # subtract_argmax = np.argmax(subtract_neg, axis=1)
-        # group_dates = [last_dates[index] for index in subtract_argmax]
-
-        # # some input dates greater than last date, replace them by na
-        # dates_greater_last_date = np.array(input_dates) > int(last_date)
-        # dates_greater_last_date_index = np.where(dates_greater_last_date)[0]
-        # group_dates = [str(group_date) for group_date in group_dates]
-        # group_dates = pd.Series(group_dates)
-        # group_dates[dates_greater_last_date_index] = np.nan
-        # group_dates = list(group_dates)
-        # return group_dates
-
         # covert input dates to datetime64[D]
         input_dates = [datetime.strptime(str(input_date), '%Y%m%d') for input_date in input_dates]
         input_dates = [datetime.strftime(input_date, '%Y-%m-%d') for input_date in input_dates]
