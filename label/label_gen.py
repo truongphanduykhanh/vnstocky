@@ -10,6 +10,7 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 
 class Label:
@@ -155,9 +156,52 @@ class Label:
         group_dates = [str(group_date) if group_date != 0 else np.nan for group_date in group_dates]
         return group_dates
 
+    def __get_mean_price(self, last_date, label_col, term=1, gap=3):
+        '''
+        Get label data frame from raw data.
+
+        Parameters
+        ----------
+        last_date : str
+            Last date that wanted to group to. Ex: '20210731'
+        label_col : str
+            Column name of label. Ex: 'Label_Norminator'
+        term : int
+            Term in months from last_date. Ex: 1
+            Term must not be greater than gap.
+        gap : int
+            Gap in months between periods. Ex: 3
+
+        Returns
+        -------
+        mean_price : pandas.DataFrame
+            Data frame that has mean price of each ticker at each date group.
+            Ex. columns names: ['Ticker', 'Label_Time', 'Label_Norminator']
+        '''
+        mean_price = (
+            self.raw_df
+            # group dates
+            .rename(columns={'<Ticker>': 'Ticker'})
+            .assign(Label_Time=lambda df: (
+                self.group_dates(
+                    df['<DTYYYYMMDD>'],
+                    last_date=last_date,
+                    term=term,
+                    gap=gap)))
+            # calculate mean closing prices
+            .groupby(['Ticker', 'Label_Time'])
+            .agg({'<CloseFixed>': 'mean'})
+            .reset_index()
+            .rename(columns={'<CloseFixed>': label_col})
+        )
+        return mean_price
+
     def get_label(
         self,
-        last_date='20210731',
+        last_date_nominator='20210731',
+        last_date_denominator='20210430',
+        term_nominator=1,
+        term_denominator=1,
         gap=3,
         id_col='Ticker',
         label_time_col='Label_Time',
@@ -169,8 +213,16 @@ class Label:
 
         Parameters
         ----------
-        last_date : str
-            Last date that wanted to group to. Ex: '20210731'
+        last_date_nominator : str
+            Last date of nominator that wanted to group to. Ex: '20210731'
+        last_date_denominator : str
+            Last date of denominator that wanted to group to. Ex: '20210430'
+        term_nominator : int
+            Term in months from last_date_nominator. Ex: 1
+            Term must not be greater than gap.
+        term_denominator : int
+            Term in months from last_date_denominator. Ex: 1
+            Term must not be greater than gap.
         gap : int
             Gap in months between periods. Ex: 3
         id_col : str
@@ -188,39 +240,47 @@ class Label:
             Label with final label data (pandas.DataFrame)
             Ex. columns names: ['Ticker', 'Label_Time', 'Feat_Time', 'Return']
         '''
+        nominator = self.__get_mean_price(
+            last_date=last_date_nominator,
+            label_col='Label_Nominator',
+            term=term_nominator,
+            gap=gap)
+        denominator = self.__get_mean_price(
+            last_date=last_date_denominator,
+            label_col='Label_Denominator',
+            term=term_denominator,
+            gap=gap)
+
         label_df = (
-            self.raw_df
-            # Raw input data having ['<Ticker>', '<DTYYYYMMDD>', '<CloseFixed>']
-            .rename(columns={'<Ticker>': id_col})
-
-            # create group last dates. Ex: '20210710' -> '20210731'
-            .assign(**{label_time_col: lambda df: (
-                Label.group_dates(df['<DTYYYYMMDD>'], last_date=last_date, gap=gap))})
-
-            # calculate mean closing prices
-            .groupby([id_col, label_time_col])
-            .agg({'<CloseFixed>': 'mean'})
-            .reset_index()
-            .rename(columns={'<CloseFixed>': 'MeanCloseFixed'})
+            nominator
+            .merge(denominator, how='left', on=['Ticker', 'Label_Time'])
 
             # add lag prices columne (denominator column)
-            .sort_values([id_col, label_time_col], ascending=[True, False])
-            .assign(MeanCloseFixedLag=lambda df: (
-                df.groupby(id_col)['MeanCloseFixed'].shift(-1)))
+            .sort_values(['Ticker', 'Label_Time'], ascending=[True, False])
+            .assign(Label_Denominator=lambda df: (
+                df.groupby('Ticker')['Label_Denominator'].shift(-1)))
 
             # calculate return
-            .assign(**{label_col: lambda df: (
-                df['MeanCloseFixed'] / df['MeanCloseFixedLag'] - 1)})
+            .assign(Label=lambda df: (
+                df['Label_Nominator'] / df['Label_Denominator'] - 1))
 
             # add feature time column for later reference
-            .assign(**{feat_time_col: lambda df: (
-                df.groupby(id_col)[label_time_col].shift(-1))})
-            .loc[:, [id_col, label_time_col, feat_time_col, label_col]]
-            .dropna()
+            .assign(Feat_Time=lambda df: (
+                df.groupby('Ticker')['Label_Time'].shift(-1)))
+            .dropna()  # drop the last record, which is NA because of no denominator
 
-            # clean data frame
-            .astype({label_time_col: int, feat_time_col: int})
-            .astype({label_time_col: str, feat_time_col: str})
+            # adjusted with market return
+            .assign(Label_Market=lambda df: df.groupby('Label_Time')['Label'].transform(stats.trim_mean, 0.1))
+            .assign(Label_Normalized=lambda df: df['Label'] - df['Label_Market'])
+
+            # clean data
+            .loc[:, ['Ticker', 'Label_Time', 'Feat_Time', 'Label_Normalized']]
+            .astype({'Label_Time': str, 'Feat_Time': str})
+            .rename(columns={
+                'Ticker': id_col,
+                'Label_Time': label_time_col,
+                'Feat_Time': feat_time_col,
+                'Label_Normalized': label_col})
             .reset_index(drop=True)
         )
         self.label_df = label_df
