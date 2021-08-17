@@ -21,6 +21,19 @@ class Finance:
 
     @staticmethod
     def __gen_raw_path(ticker):
+        '''
+        Get directory path of raw data
+
+        Parameters
+        ----------
+        ticker : str
+            Ticker. Ex: 'TCB
+
+        Returns
+        -------
+        str
+            Directory path of raw data
+        '''
         return f'../data/reportfinance/{ticker}_reportfinance.csv'
 
     def load_data(self):
