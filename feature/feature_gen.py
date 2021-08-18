@@ -1,5 +1,5 @@
 '''
-This script is to generate features for stock trading.
+This script is to generate features data for stock trading.
 '''
 __author__ = 'Khanh Truong'
 __date__ = '2021-08-17'
@@ -120,7 +120,7 @@ class Utility:
         return output_time
 
 
-class Finance:
+class FinanceData:
 
     ticker_col = 'Ticker'
     time_col = 'Feat_Time'
@@ -151,7 +151,7 @@ class Finance:
         # balance sheet and income statement may have different fields length
         # create a long dummy column names; otherwise, error would arise
         ticker = self.ticker
-        raw_path = Finance.gen_raw_path(ticker)
+        raw_path = FinanceData.gen_raw_path(ticker)
         cols = list(range(0, 100))
         raw = pd.read_csv(raw_path, sep='\t', names=cols)
         self.raw = raw
@@ -202,7 +202,7 @@ class Finance:
         self.fs = fs
 
 
-class Income(Finance):
+class Income(FinanceData):
 
     start_income = 'Tổng doanh thu hoạt động kinh doanh###Gross Sale Revenues'
     end_income = 'Lợi nhuận sau thuế thu nhập doanh nghiệp###Profit after Corporate Income Tax'
@@ -222,6 +222,7 @@ class Income(Finance):
             .set_index(0)  # set elements of financial statements as index (to filter at next step)
             .loc[lambda df: ~df.index.duplicated(keep='first')]  # there are FS elements duplicates
             .loc[start_income: end_income]  # slice through the index
+            .astype(float)  # ticker KDC has error typing of string. need to convert data to float
             .set_axis(cols, axis=1)  # set the column names as pre-determined
             .drop(columns=[1900.0])  # drop redundant cols when add dummy cols
             .transpose()  # set years/quarters as index
@@ -236,7 +237,7 @@ class Income(Finance):
         self.fs.columns = eng_cols
 
 
-class Balance(Finance):
+class Balance(FinanceData):
 
     start_balance = 'Tài sản ngắn hạn###Current Assets'
     end_balance = 'TỔNG CỘNG NGUỒN VỐN ###TOTAL EQUITY'
@@ -256,6 +257,7 @@ class Balance(Finance):
             .set_index(0)  # set elements of financial statements as index (to filter at next step)
             .loc[lambda df: ~df.index.duplicated(keep='last')]  # there are FS elements duplicates
             .loc[start_balance: end_balance]  # slice through the index
+            .astype(float)  # ticker KDC has error typing of string. need to convert data to float
             .set_axis(cols, axis=1)  # set the column names as pre-determined
             .drop(columns=[1900.0])  # drop redundant cols when add dummy cols
             .transpose()  # set years/quarters as index
@@ -304,7 +306,113 @@ def get_balance(ticker):
     return balance.fs
 
 
-def get_tickers(folder):
+class FinanceFeatures:
+
+    @staticmethod
+    def calculate_roll_mean(df, window, meta_cols=['Ticker', 'Feat_Time']):
+        meta = df[meta_cols]
+        roll_mean = (
+            df
+            .groupby(meta_cols[0])
+            .rolling(window)
+            .mean()
+            .shift(-window + 1)
+            .reset_index(drop=True)
+        )
+        roll_mean = roll_mean.add_suffix(f'_Mean_{window}Q')
+        roll_mean = pd.concat([meta, roll_mean], axis=1)
+        return roll_mean
+
+    @staticmethod
+    def shift_data(df, periods, meta_cols=['Ticker', 'Feat_Time']):
+        meta = df[meta_cols]
+        shift = (
+            df
+            .drop(meta_cols[1], axis=1)
+            .groupby(meta_cols[0])
+            .shift(-periods)
+            .reset_index(drop=True)
+        )
+        shift = pd.concat([meta, shift], axis=1)
+        return shift
+
+    @staticmethod
+    def calculate_momentum(df, window, periods, meta_cols=['Ticker', 'Feat_Time']):
+        meta = df[meta_cols]
+
+        roll_mean = FinanceFeatures.calculate_roll_mean(df, window)
+        shift = FinanceFeatures.shift_data(roll_mean, periods)
+
+        roll_mean = roll_mean.drop(meta_cols, axis=1)
+        shift = shift.drop(meta_cols, axis=1)
+
+        momentum = roll_mean.div(shift)
+        momentum = momentum.add_suffix(f'_Momen_{periods}Q')
+        momentum = pd.concat([meta, momentum], axis=1)
+        return momentum
+
+    @staticmethod
+    def calculate_momentum_loop(
+        df,
+        window_list=[1, 2, 4],
+        periods_list=[1, 2, 4],
+        meta_cols=['Ticker', 'Feat_Time']
+    ):
+        meta = df[meta_cols]
+        roll_mean_momentum = []
+        for window in window_list:
+            for periods in periods_list:
+                momentum_window_periods = FinanceFeatures.calculate_momentum(df, window, periods)
+                momentum_window_periods = momentum_window_periods.drop(meta_cols, axis=1)
+                roll_mean_momentum.append(momentum_window_periods)
+        roll_mean_momentum = pd.concat([meta] + roll_mean_momentum, axis=1)
+        return roll_mean_momentum
+
+    @staticmethod
+    def get_common_size(df, master_col, meta_cols=['Ticker', 'Feat_Time']):
+        df_common = (
+            df
+            .set_index(meta_cols)
+            .divide(df.set_index(meta_cols)[master_col], axis=0)
+            .add_suffix('_Common')
+            .reset_index()
+        )
+        return df_common
+
+    @staticmethod
+    def calculate_momentum_common(df, window, periods, meta_cols=['Ticker', 'Feat_Time']):
+        meta = df[meta_cols]
+
+        roll_mean = FinanceFeatures.calculate_roll_mean(df, window)
+        shift = FinanceFeatures.shift_data(roll_mean, periods)
+
+        roll_mean = roll_mean.drop(meta_cols, axis=1)
+        shift = shift.drop(meta_cols, axis=1)
+
+        momentum = roll_mean.subtract(shift)
+        momentum = momentum.add_suffix(f'_Momen_{periods}Q')
+        momentum = pd.concat([meta, momentum], axis=1)
+        return momentum
+
+    @staticmethod
+    def calculate_momentum_common_loop(
+        df,
+        window_list=[1, 2, 4],
+        periods_list=[1, 2, 4],
+        meta_cols=['Ticker', 'Feat_Time']
+    ):
+        meta = df[meta_cols]
+        roll_mean_momentum = []
+        for window in window_list:
+            for periods in periods_list:
+                momentum_window_periods = FinanceFeatures.calculate_momentum_common(df, window, periods)
+                momentum_window_periods = momentum_window_periods.drop(meta_cols, axis=1)
+                roll_mean_momentum.append(momentum_window_periods)
+        roll_mean_momentum = pd.concat([meta] + roll_mean_momentum, axis=1)
+        return roll_mean_momentum
+
+
+def get_tickers(folder='../data/excelfull'):
     '''
     Get all tickers in a folder
 
@@ -327,28 +435,42 @@ def get_tickers(folder):
 
 if __name__ == '__main__':
 
+    from functools import reduce
+
     tickers = get_tickers('../data/excelfull')
 
     # INCOME STATMENT
-    income_data = []
+    income = []
     for i, ticker in enumerate(tickers):
-        income = get_income(ticker)
-        income_data.append(income)
-        # print log
+        income_i = get_income(ticker)
+        income.append(income_i)
         print(f'{i+1:5}/{len(tickers)} \t ---> Finishing Income {ticker}')
 
-    print('---> Done')
-    income_data = pd.concat(income_data).reset_index(drop=True)
-    income_data.to_csv('income_data.csv', index=False)
+    print('---> Done Income')
+    income = pd.concat(income).reset_index(drop=True)
+    income_momen = FinanceFeatures.calculate_momentum_loop(income)
+    income_common = FinanceFeatures.get_common_size(income, 'Gross_Sale_Revenues')
+    income_common_momen = FinanceFeatures.calculate_momentum_common_loop(income_common)
 
     # BALANCE SHEET
-    balance_data = []
+    balance = []
     for i, ticker in enumerate(tickers):
-        balance = get_balance(ticker)
-        balance_data.append(balance)
-        # print log
+        balance_i = get_balance(ticker)
+        balance.append(balance_i)
         print(f'{i+1:5}/{len(tickers)} \t ---> Finishing Balance {ticker}')
 
-    print('---> Done')
-    balance_data = pd.concat(balance_data).reset_index(drop=True)
-    balance_data.to_csv('balance_data.csv', index=False)
+    print('---> Done Balance')
+    balance = pd.concat(balance).reset_index(drop=True)
+    balance_momen = FinanceFeatures.calculate_momentum_loop(balance)
+    balance_common = FinanceFeatures.get_common_size(balance, 'Total_Assets')
+    balance_common_momen = FinanceFeatures.calculate_momentum_common_loop(balance_common)
+
+    feature_list = [
+        income, income_momen, income_common, income_common_momen,
+        balance, balance_momen, balance_common, balance_common_momen]
+
+    feature = reduce(
+        lambda left, right: pd.merge(
+            left, right, on=['Ticker', 'Feat_Time'], how='outer'), feature_list)
+
+    feature.to_csv('feature.csv', index=False)
