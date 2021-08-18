@@ -411,6 +411,36 @@ class FinanceFeatures:
         roll_mean_momentum = pd.concat([meta] + roll_mean_momentum, axis=1)
         return roll_mean_momentum
 
+    @staticmethod
+    def get_ratios(income, balance, meta_cols=['Ticker', 'Feat_Time']):
+        income_balance = pd.merge(income, balance, on=meta_cols, how='outer')
+        meta = income_balance[meta_cols]
+        ratios = pd.DataFrame({
+            # profitability
+            'Gross_Margin_Ratio': income_balance['Gross_Profit'] / income_balance['Net_Sales'],
+            'Operating_Margin_Ratio': income_balance['Net_Profit_From_Operating_Activities'] / income_balance['Net_Sales'],
+            'Returen_On_Equity_Ratio': income_balance['Profit_After_Corporate_Income_Tax'] / income_balance['Owners_Equity'],
+            'Returen_On_Assets_Ratio': income_balance['Profit_After_Corporate_Income_Tax'] / income_balance['Total_Assets'],
+
+            # liquidity
+            'Current_Ratio': income_balance['Current_Assets'] / income_balance['Short_Term_Liabilities'],
+            'Quick_Ratio': (income_balance['Current_Assets'] - income_balance['Inventory']) / income_balance['Short_Term_Liabilities'],
+            'Cash_Ratio': income_balance['Cash_And_Cash_Equivalents'] / income_balance['Short_Term_Liabilities'],
+
+            # leverage
+            'Debt_Ratio': income_balance['Liabilities'] / income_balance['Total_Assets'],
+            'Debt_To_Equity_Ratio': income_balance['Liabilities'] / income_balance['Owners_Equity'],
+            'Interest_Coverage_Ratio': income_balance['Net_Profit_From_Operating_Activities'] / income_balance['Other_Expenses'],
+
+            # efficiency
+            'Assets_Turnover_Ratio': income_balance['Net_Sales'] / income_balance['Total_Assets'],
+            'Inventory_Turnover_Ratio': income_balance['Cost_Of_Goods_Sold'] / income_balance['Inventory'],
+            'Receivables_Turnover_Ratio': income_balance['Net_Sales'] / income_balance['Short_Term_Account_Receivables'],
+            'Days_Sales_Inventory_Ratio': 365 / (income_balance['Cost_Of_Goods_Sold'] / income_balance['Inventory'])
+        })
+        ratios = pd.concat([meta, ratios], axis=1)
+        return ratios
+
 
 def get_tickers(folder='../data/excelfull'):
     '''
@@ -465,9 +495,14 @@ if __name__ == '__main__':
     balance_common = FinanceFeatures.get_common_size(balance, 'Total_Assets')
     balance_common_momen = FinanceFeatures.calculate_momentum_common_loop(balance_common)
 
+    # RATIOS
+    ratios = FinanceFeatures.get_ratios(income, balance)
+    ratios_momen = FinanceFeatures.calculate_momentum_common_loop(ratios)
+
     feature_list = [
         income, income_momen, income_common, income_common_momen,
-        balance, balance_momen, balance_common, balance_common_momen]
+        balance, balance_momen, balance_common, balance_common_momen,
+        ratios, ratios_momen]
 
     feature = reduce(
         lambda left, right: pd.merge(
