@@ -199,10 +199,10 @@ class Label:
     def get_label(
         self,
         last_date_nominator='20210731',
-        last_date_denominator='20210430',
+        last_date_denominator='20210131',
         term_nominator=1,
         term_denominator=1,
-        gap=3,
+        gap=6,
         id_col='Ticker',
         label_time_col='Label_Time',
         feat_time_col='Feat_Time',
@@ -286,7 +286,7 @@ class Label:
         self.label_df = label_df
         return self
 
-    def export(self, path='label.csv'):
+    def export(self, path='label_six_months.csv'):
         self.label_df.to_csv(path, index=False)
 
 

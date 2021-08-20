@@ -419,8 +419,8 @@ class FinanceFeatures:
             # profitability
             'Gross_Margin_Ratio': income_balance['Gross_Profit'] / income_balance['Net_Sales'],
             'Operating_Margin_Ratio': income_balance['Net_Profit_From_Operating_Activities'] / income_balance['Net_Sales'],
-            'Returen_On_Equity_Ratio': income_balance['Profit_After_Corporate_Income_Tax'] / income_balance['Owners_Equity'],
-            'Returen_On_Assets_Ratio': income_balance['Profit_After_Corporate_Income_Tax'] / income_balance['Total_Assets'],
+            'Return_On_Equity_Ratio': income_balance['Profit_After_Corporate_Income_Tax'] / income_balance['Owners_Equity'],
+            'Return_On_Assets_Ratio': income_balance['Profit_After_Corporate_Income_Tax'] / income_balance['Total_Assets'],
 
             # liquidity
             'Current_Ratio': income_balance['Current_Assets'] / income_balance['Short_Term_Liabilities'],
