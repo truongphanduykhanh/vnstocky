@@ -10,12 +10,17 @@ import datetime
 
 import pandas as pd
 from dateutil.relativedelta import relativedelta
+from pandas.core.frame import DataFrame
 
 
 class Utility:
 
     @staticmethod
-    def get_ith_or_last_elements(ls: list, i: int = 2):
+    def get_ith_or_last_elements(ls: list[list], i: int = 2) -> list:
+        '''
+        In a list including n sublists, get i-th element of every sublist.
+        If i>=len(sublist), get last elemment of every sublist.
+        '''
         ith_elements = []
         for li in ls:
             if len(li) >= i:
@@ -25,22 +30,38 @@ class Utility:
         return ith_elements
 
     @staticmethod
-    def get_years_keep(years):
-        years_keep = (
-            years
-            .to_series()
-            .groupby(level=0)
-            .count()
-            .loc[lambda x: (x == 1) | (x == 5) | (x.index == '2021')]
-            .index
-        )
+    def get_years_keep(years: list[str], remove_years_once=True) -> list[str]:
+        '''
+        In a list of years, e.g. ['2021', '2020', '2020', '2020', '2020', '2020', '2019'],
+        keep only 2021 and the years that appear exactly once (or five times).
+        '''
+        if remove_years_once:
+            years_keep = (
+                pd.Series(years)
+                .value_counts()
+                .loc[lambda x: (x == 5) | (x.index == '2021')]
+                .sort_index(ascending=False)
+                .index
+            )
+        else:
+            years_keep = (
+                pd.Series(years)
+                .value_counts()
+                .loc[lambda x: (x == 1) | (x == 5) | (x.index == '2021')]
+                .sort_index(ascending=False)
+                .index
+            )
+        years_keep = list(years_keep)
         return years_keep
 
     @staticmethod
-    def convert_2021_to_dates(years):
+    def convert_2021_to_dates(years: list[str]) -> list[str]:
+        '''
+        In a list of years, e.g. ['2021', '2020', '2020', '2020', '2020', '2020', '2019'],
+        return the quarter ending dates of 2021. E.g. ['20210331'].
+        '''
         count_2021 = (
-            years
-            .to_series()
+            pd.Series(years)
             .loc[lambda x: x == '2021']
             .shape[0]
         )
@@ -57,26 +78,36 @@ class Utility:
         return dates
 
     @staticmethod
-    def convert_years_once_to_dates(years):
+    def convert_years_once_to_dates(years: list[str]) -> list[str]:
+        '''
+        In a list of years, e.g. ['2021', '2020', '2020', '2020', '2020', '2020', '2019'],
+        except 2021, add dummy suffix '9999' the years that appear exactly once.
+        E.g. ['20129999'].
+        '''
         years_once = (
-            years
-            .to_series()
-            .groupby(level=0)
-            .count()
-            .loc[lambda x: (x == 1) & (x.index != '2021')]
+            pd.Series(years)
+            .value_counts()
+            .loc[lambda x: (x == 1) | (x.index == '2021')]
+            .sort_index(ascending=False)
             .index
         )
+        years_once = list(years_once)
         dates = [year + '9999' for year in years_once]
         return dates
 
     @staticmethod
-    def convert_years_five_times_to_dates(years):
+    def convert_years_five_times_to_dates(years: list[str]) -> list[str]:
+        '''
+        In a list of years, e.g. ['2021', '2020', '2020', '2020', '2020', '2020', '2019'],
+        for years that appear exactly five times,
+        add dummy suffix '9999' to the first appearance (represent the full year),
+        add quarter ending dates to the remaining four appearances.
+        '''
         years_five_times = (
-            years
-            .to_series()
-            .groupby(level=0)
-            .count()
+            pd.Series(years)
+            .value_counts()
             .loc[lambda x: x == 5]
+            .sort_index(ascending=False)
             .index
         )
         dates = []
@@ -88,30 +119,12 @@ class Utility:
         return dates
 
     @staticmethod
-    def get_last_dates(input_time,
-                       lag=1,
-                       input_format='%Y%m%d',
-                       output_format='%Y%m%d'
-                       ):
-        '''
-        Get list of last dates of months or weeks
-
-        Parameters
-        ----------
-        input_time : str
-            input time. Ex: '20210630'
-        lag : int
-            number of month wanted to look future. Ex: 1
-        input_format : str
-            format of input time. Ex: '%Y%m' or '%Y%m%d'
-        output_format : str
-            format of output time. Ex: '%Y%m' or '%Y%m%d'
-
-        Returns
-        -------
-        list of str
-            last date of next (delta) month. Ex: '20210731'
-        '''
+    def get_last_dates(input_time: str,
+                       lag: int = 0,
+                       input_format: str = '%Y%m%d',
+                       output_format: str = '%Y%m%d'
+                       ) -> list[str]:
+        '''Get list of last dates of months.'''
         input_time = datetime.datetime.strptime(input_time, input_format)
         output_time = input_time + relativedelta(months=lag)
         output_time = output_time.replace(day=28) + relativedelta(days=4)
@@ -120,55 +133,60 @@ class Utility:
         return output_time
 
 
-class FinanceData:
+class FS:
 
     ticker_col = 'Ticker'
     time_col = 'Feat_Time'
 
-    def __init__(self, ticker):
+    def __init__(self, ticker: str):
         self.ticker = ticker
-        self.raw = None
-        self.fs = None
+        self.raw = None  # raw data
+        self.fs = None  # financial statement (income or balance)
 
     @staticmethod
-    def gen_raw_path(ticker):
-        '''
-        Get directory path of raw data
-
-        Parameters
-        ----------
-        ticker : str
-            Ticker. Ex: 'TCB
-
-        Returns
-        -------
-        str
-            Directory path of raw data
-        '''
+    def gen_raw_path(ticker: str) -> str:
+        '''Get directory path of raw data.'''
         return f'../data/reportfinance/{ticker}_reportfinance.csv'
 
     def load_data(self):
+        '''
+        Load raw data to object.
+        '''
         # balance sheet and income statement may have different fields length
         # create a long dummy column names; otherwise, error would arise
         ticker = self.ticker
-        raw_path = FinanceData.gen_raw_path(ticker)
+        raw_path = FS.gen_raw_path(ticker)
         cols = list(range(0, 100))
         raw = pd.read_csv(raw_path, sep='\t', names=cols)
         self.raw = raw
 
     def get_fs_raw(self):
+        '''
+        Get income/balance raw from the raw data.
+        Need customed construction for income statement and balance sheet.
+        '''
         pass
 
     def clean_fs_column_names(self):
+        '''
+        Get english columns for income/balance.
+        Need customed construction for income statement and balance sheet.
+        '''
         pass
 
-    def __remove_inadequate_years(self):
+    def __remove_inadequate_years(self, remove_years_once: bool = True):
+        '''Remove years that don't appear exactly once, except 2021.'''
         years = self.fs.index
-        years_keep = Utility.get_years_keep(years)
+        years_keep = Utility.get_years_keep(years, remove_years_once=remove_years_once)
         self.fs = self.fs.loc[lambda df: df.index.isin(years_keep)]
 
-    def convert_feat_time_to_dates(self, remove_years_once=True):
-        self.__remove_inadequate_years()
+    def convert_feat_time_to_dates(
+        self,
+        remove_years_once: bool = True,
+        remove_years_full: bool = True
+    ):
+        '''Convert feature time from years to quarter ending dates.'''
+        self.__remove_inadequate_years(remove_years_once=remove_years_once)
 
         dates_2021 = Utility.convert_2021_to_dates(self.fs.index)
         dates_years_once = Utility.convert_years_once_to_dates(self.fs.index)
@@ -183,14 +201,19 @@ class FinanceData:
             .reset_index(drop=True)
         )
         self.fs = self.fs.set_index(dates)
-        if remove_years_once:
+        if remove_years_full:
             self.fs = self.fs.loc[lambda df: [len(date) == 8 for date in df.index.values]]
 
-    def lag_feat_time(self, lag=1):
+    def lag_feat_time(self, lag: int = 1):
+        '''
+        Financial statements are published 1 or 2 months late.
+        Lag the feature time to realize the true context.
+        '''
         feat_time_lag = self.fs.index.to_series().apply(Utility.get_last_dates, lag=lag)
         self.fs.index = feat_time_lag
 
     def add_ticker(self):
+        '''Add ticker to the financial statement (income or balance).'''
         fs = self.fs
         time_col = self.time_col
         ticker_col = self.ticker_col
@@ -202,15 +225,16 @@ class FinanceData:
         self.fs = fs
 
 
-class Income(FinanceData):
+class Income(FS):
 
     start_income = 'Tổng doanh thu hoạt động kinh doanh###Gross Sale Revenues'
     end_income = 'Lợi nhuận sau thuế thu nhập doanh nghiệp###Profit after Corporate Income Tax'
 
-    def __init__(self, ticker):
+    def __init__(self, ticker: str):
         self.ticker = ticker
 
     def get_income_raw(self):
+        '''Get income raw from the raw data.'''
         start_income = self.start_income
         end_income = self.end_income
         raw = self.raw
@@ -231,21 +255,23 @@ class Income(FinanceData):
         self.fs = income
 
     def clean_income_column_names(self):
+        '''Get english columns for income.'''
         cols_split = self.fs.columns.str.split(pat='###')
         eng_cols = Utility.get_ith_or_last_elements(cols_split)
         eng_cols = [col.title().replace(' ', '_') for col in eng_cols]
         self.fs.columns = eng_cols
 
 
-class Balance(FinanceData):
+class Balance(FS):
 
     start_balance = 'Tài sản ngắn hạn###Current Assets'
     end_balance = 'TỔNG CỘNG NGUỒN VỐN ###TOTAL EQUITY'
 
-    def __init__(self, ticker):
+    def __init__(self, ticker: str):
         self.ticker = ticker
 
     def get_balance_raw(self):
+        '''Get balance raw from the raw data.'''
         start_balance = self.start_balance
         end_balance = self.end_balance
         raw = self.raw
@@ -266,6 +292,7 @@ class Balance(FinanceData):
         self.fs = balance
 
     def clean_balance_column_names(self):
+        '''Get english columns for balance.'''
         cols_split = self.fs.columns.str.split(pat='###')
         eng_cols = Utility.get_ith_or_last_elements(cols_split)
         eng_cols = (
@@ -284,32 +311,39 @@ class Balance(FinanceData):
         self.fs.columns = eng_cols
 
 
-def get_income(ticker):
+def get_income(ticker: str) -> pd.DataFrame:
+    '''Get income statement for one ticker.'''
     income = Income(ticker)
     income.load_data()
     income.get_income_raw()
     income.clean_income_column_names()
-    income.convert_feat_time_to_dates()
-    income.lag_feat_time()
+    income.convert_feat_time_to_dates(remove_years_once=True, remove_years_full=True)
+    income.lag_feat_time(lag=1)
     income.add_ticker()
     return income.fs
 
 
-def get_balance(ticker):
+def get_balance(ticker: str) -> pd.DataFrame:
+    '''Get balance sheet for one ticker.'''
     balance = Balance(ticker)
     balance.load_data()
     balance.get_balance_raw()
     balance.clean_balance_column_names()
-    balance.convert_feat_time_to_dates()
-    balance.lag_feat_time()
+    balance.convert_feat_time_to_dates(remove_years_once=True, remove_years_full=True)
+    balance.lag_feat_time(lag=1)
     balance.add_ticker()
     return balance.fs
 
 
-class FinanceFeatures:
+class FSFeatures:
 
     @staticmethod
-    def calculate_roll_mean(df, window, meta_cols=['Ticker', 'Feat_Time']):
+    def calculate_roll_mean(
+        df: pd.DataFrame,
+        window: int,
+        meta_cols: list[str] = ['Ticker', 'Feat_Time']
+    ) -> pd.DataFrame:
+        '''Calculate moving average (roll mean) of financial statement.'''
         meta = df[meta_cols]
         roll_mean = (
             df
@@ -324,7 +358,12 @@ class FinanceFeatures:
         return roll_mean
 
     @staticmethod
-    def shift_data(df, periods, meta_cols=['Ticker', 'Feat_Time']):
+    def shift_data(
+        df: pd.DataFrame,
+        periods: int,
+        meta_cols: list[str] = ['Ticker', 'Feat_Time']
+    ) -> pd.DataFrame:
+        '''Shift financial statement periods quarters back to history.'''
         meta = df[meta_cols]
         shift = (
             df
@@ -337,11 +376,17 @@ class FinanceFeatures:
         return shift
 
     @staticmethod
-    def calculate_momentum(df, window, periods, meta_cols=['Ticker', 'Feat_Time']):
+    def calculate_momentum(
+        df: pd.DataFrame,
+        window: int,
+        periods: int,
+        meta_cols: list[str] = ['Ticker', 'Feat_Time']
+    ) -> pd.DataFrame:
+        '''Calculate the growth rate (momentum) of financial statement'''
         meta = df[meta_cols]
 
-        roll_mean = FinanceFeatures.calculate_roll_mean(df, window)
-        shift = FinanceFeatures.shift_data(roll_mean, periods)
+        roll_mean = FSFeatures.calculate_roll_mean(df, window)
+        shift = FSFeatures.shift_data(roll_mean, periods)
 
         roll_mean = roll_mean.drop(meta_cols, axis=1)
         shift = shift.drop(meta_cols, axis=1)
@@ -353,23 +398,29 @@ class FinanceFeatures:
 
     @staticmethod
     def calculate_momentum_loop(
-        df,
-        window_list=[1, 2, 4],
-        periods_list=[1, 2, 4],
-        meta_cols=['Ticker', 'Feat_Time']
-    ):
+        df: pd.DataFrame,
+        window_list: list[int] = [1, 2, 4],
+        periods_list: list[int] = [1, 2, 4],
+        meta_cols: list[str] = ['Ticker', 'Feat_Time']
+    ) -> pd.DataFrame:
+        '''Calulate growth rate (momentum) over different windows and periods settings.'''
         meta = df[meta_cols]
         roll_mean_momentum = []
         for window in window_list:
             for periods in periods_list:
-                momentum_window_periods = FinanceFeatures.calculate_momentum(df, window, periods)
+                momentum_window_periods = FSFeatures.calculate_momentum(df, window, periods)
                 momentum_window_periods = momentum_window_periods.drop(meta_cols, axis=1)
                 roll_mean_momentum.append(momentum_window_periods)
         roll_mean_momentum = pd.concat([meta] + roll_mean_momentum, axis=1)
         return roll_mean_momentum
 
     @staticmethod
-    def get_common_size(df, master_col, meta_cols=['Ticker', 'Feat_Time']):
+    def get_common_size(
+        df: pd.DataFrame,
+        master_col: str,
+        meta_cols: list[str] = ['Ticker', 'Feat_Time']
+    ):
+        '''Calulate common size of financial statement.'''
         df_common = (
             df
             .set_index(meta_cols)
@@ -380,12 +431,16 @@ class FinanceFeatures:
         return df_common
 
     @staticmethod
-    def calculate_momentum_common(df, window, periods, meta_cols=['Ticker', 'Feat_Time']):
+    def calculate_momentum_common(
+        df: pd.DataFrame,
+        window: int,
+        periods: int,
+        meta_cols: list[str] = ['Ticker', 'Feat_Time']
+    ) -> pd.DataFrame:
+        '''Calculate the growth rate (momentum) of financial statement common size'''
         meta = df[meta_cols]
-
-        roll_mean = FinanceFeatures.calculate_roll_mean(df, window)
-        shift = FinanceFeatures.shift_data(roll_mean, periods)
-
+        roll_mean = FSFeatures.calculate_roll_mean(df, window)
+        shift = FSFeatures.shift_data(roll_mean, periods)
         roll_mean = roll_mean.drop(meta_cols, axis=1)
         shift = shift.drop(meta_cols, axis=1)
 
@@ -396,23 +451,32 @@ class FinanceFeatures:
 
     @staticmethod
     def calculate_momentum_common_loop(
-        df,
-        window_list=[1, 2, 4],
-        periods_list=[1, 2, 4],
-        meta_cols=['Ticker', 'Feat_Time']
-    ):
+        df: pd.DataFrame,
+        window_list: list[int] = [1, 2, 4],
+        periods_list: list[int] = [1, 2, 4],
+        meta_cols: list[str] = ['Ticker', 'Feat_Time']
+    ) -> pd.DataFrame:
+        '''
+        Calulate growth rate (momentum) of financial statement common size
+        over different windows and periods settings.
+        '''
         meta = df[meta_cols]
         roll_mean_momentum = []
         for window in window_list:
             for periods in periods_list:
-                momentum_window_periods = FinanceFeatures.calculate_momentum_common(df, window, periods)
+                momentum_window_periods = FSFeatures.calculate_momentum_common(df, window, periods)
                 momentum_window_periods = momentum_window_periods.drop(meta_cols, axis=1)
                 roll_mean_momentum.append(momentum_window_periods)
         roll_mean_momentum = pd.concat([meta] + roll_mean_momentum, axis=1)
         return roll_mean_momentum
 
     @staticmethod
-    def get_ratios(income, balance, meta_cols=['Ticker', 'Feat_Time']):
+    def get_ratios(
+        income: pd.DataFrame,
+        balance: pd.DataFrame,
+        meta_cols: list[str] = ['Ticker', 'Feat_Time']
+    ) -> pd.DataFrame:
+        '''Calulate financial ratios from income and balance.'''
         income_balance = pd.merge(income, balance, on=meta_cols, how='outer')
         meta = income_balance[meta_cols]
         ratios = pd.DataFrame({
@@ -442,7 +506,7 @@ class FinanceFeatures:
         return ratios
 
 
-def get_tickers(folder='../data/excelfull'):
+def get_tickers(folder: str = '../data/excelfull') -> str:
     '''
     Get all tickers in a folder
 
@@ -478,9 +542,9 @@ if __name__ == '__main__':
 
     print('---> Done Income')
     income = pd.concat(income).reset_index(drop=True)
-    income_momen = FinanceFeatures.calculate_momentum_loop(income)
-    income_common = FinanceFeatures.get_common_size(income, 'Gross_Sale_Revenues')
-    income_common_momen = FinanceFeatures.calculate_momentum_common_loop(income_common)
+    income_momen = FSFeatures.calculate_momentum_loop(income)
+    income_common = FSFeatures.get_common_size(income, 'Gross_Sale_Revenues')
+    income_common_momen = FSFeatures.calculate_momentum_common_loop(income_common)
 
     # BALANCE SHEET
     balance = []
@@ -491,13 +555,13 @@ if __name__ == '__main__':
 
     print('---> Done Balance')
     balance = pd.concat(balance).reset_index(drop=True)
-    balance_momen = FinanceFeatures.calculate_momentum_loop(balance)
-    balance_common = FinanceFeatures.get_common_size(balance, 'Total_Assets')
-    balance_common_momen = FinanceFeatures.calculate_momentum_common_loop(balance_common)
+    balance_momen = FSFeatures.calculate_momentum_loop(balance)
+    balance_common = FSFeatures.get_common_size(balance, 'Total_Assets')
+    balance_common_momen = FSFeatures.calculate_momentum_common_loop(balance_common)
 
     # RATIOS
-    ratios = FinanceFeatures.get_ratios(income, balance)
-    ratios_momen = FinanceFeatures.calculate_momentum_common_loop(ratios)
+    ratios = FSFeatures.get_ratios(income, balance)
+    ratios_momen = FSFeatures.calculate_momentum_common_loop(ratios)
 
     feature_list = [
         income, income_momen, income_common, income_common_momen,

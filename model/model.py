@@ -309,21 +309,18 @@ def grid_search_xgb(
 
     Returns
     -------
-    list of Booster
-        list of XGBoost models
     pandas.DataFrame
         results of grid search
     '''
     params_list = convert_params_to_list_dict(params_dict)
     print(f'There are {len(params_list)} hyperparameter sets.')
-    global models, results
-    models = []
-    results = []
+    global grid_search
+    grid_search = []
     start = datetime.datetime.now()
 
     for i, params in enumerate(params_list):
         evals_result = {}
-        model = xgb.train(
+        booster = xgb.train(
             params,
             dtrain=dtrain,
             num_boost_round=num_boost_round,
@@ -344,10 +341,10 @@ def grid_search_xgb(
         gap_at_val_max = metric_gap[metric_val_max_index]
         overfit_max_metric = [
             metric_val_last, metric_val_max, metric_val_max_index, gap_at_val_max]
+        grid_search_i = list(params.values()) + overfit_max_metric
 
         # append loop result
-        models.append(model)
-        results.append(list(params.values()) + overfit_max_metric)
+        grid_search.append(grid_search_i)
 
         # print log
         end_i = datetime.datetime.now()
@@ -358,25 +355,27 @@ def grid_search_xgb(
         print(f'Finishing {i+1:4}/{len(params_list)} \
             ---> Remaining {hours:02}:{minutes:02}:{seconds:02}')
 
-    results = pd.DataFrame(
-        results,
+    grid_search = pd.DataFrame(
+        grid_search,
         columns=list(params.keys()) + \
-        ['metric_val_last' + 'metric_val_max', 'metric_val_max_index', 'gap_at_val_max']
+        ['metric_val_last', 'metric_val_max', 'metric_val_max_index', 'gap_at_val_max']
     )
-    results = results.drop(['objective', 'eval_metric'], axis=1)
+    grid_search = grid_search.drop(['objective', 'eval_metric'], axis=1)
     print('Done')
-    return models, results
+    return grid_search
 
 
-def get_best_model(models, results, criteria='metric_val_max', higher_better=True):
+def get_best_model(dtrain, params_dict, grid_search, criteria='metric_val_max', higher_better=True):
     '''
     Select the best model from grid search
 
     Parameters
     ----------
-    models : list of Booster
-        List of XGBoost models from grid search.
-    results : pandas.DataFrame
+    dtrain : XGBoost data
+        Training data.
+    params_dict : dict
+        Dictionary of hyperparameters.
+    grid_search : pandas.DataFrame
         Results of grid search.
     criteria : str
         Column name of metric in results on that is based to select best model.
@@ -388,9 +387,16 @@ def get_best_model(models, results, criteria='metric_val_max', higher_better=Tru
     Booster
         Best XGBoost model.
     '''
-    best_model_index = results.sort_values(criteria, ascending=1 - higher_better).head(1).index[0]
-    best_model = models[best_model_index]
-    return best_model
+    best_model_index = grid_search.sort_values(criteria, ascending=1 - higher_better).head(1).index[0]
+    best_model_params = convert_params_to_list_dict(params_dict)[best_model_index]
+
+    booster = xgb.train(
+        best_model_params,
+        dtrain=dtrain,
+        num_boost_round=grid_search.loc[best_model_index]['metric_val_max_index'] + 1,
+        verbose_eval=False
+    )
+    return booster
 
 
 def get_calibration(y_pred, y_true, n_group=10):
