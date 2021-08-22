@@ -2,7 +2,7 @@
 This script is to generate features data for stock trading.
 '''
 __author__ = 'Khanh Truong'
-__date__ = '2021-08-17'
+__date__ = '2021-08-22'
 
 
 import os
@@ -10,7 +10,6 @@ import datetime
 
 import pandas as pd
 from dateutil.relativedelta import relativedelta
-from pandas.core.frame import DataFrame
 
 
 class Utility:
@@ -87,7 +86,7 @@ class Utility:
         years_once = (
             pd.Series(years)
             .value_counts()
-            .loc[lambda x: (x == 1) | (x.index == '2021')]
+            .loc[lambda x: (x == 1) & (x.index != '2021')]
             .sort_index(ascending=False)
             .index
         )
@@ -335,6 +334,41 @@ def get_balance(ticker: str) -> pd.DataFrame:
     return balance.fs
 
 
+def get_ratios(
+    income: pd.DataFrame,
+    balance: pd.DataFrame,
+    meta_cols: list[str] = ['Ticker', 'Feat_Time']
+) -> pd.DataFrame:
+    '''Calulate financial ratios from income and balance.'''
+    income_balance = pd.merge(income, balance, on=meta_cols, how='outer')
+    meta = income_balance[meta_cols]
+    ratios = pd.DataFrame({
+        # profitability
+        'Gross_Margin_Ratio': income_balance['Gross_Profit'] / income_balance['Net_Sales'],
+        'Operating_Margin_Ratio': income_balance['Net_Profit_From_Operating_Activities'] / income_balance['Net_Sales'],
+        'Return_On_Equity_Ratio': income_balance['Profit_After_Corporate_Income_Tax'] / income_balance['Owners_Equity'],
+        'Return_On_Assets_Ratio': income_balance['Profit_After_Corporate_Income_Tax'] / income_balance['Total_Assets'],
+
+        # liquidity
+        'Current_Ratio': income_balance['Current_Assets'] / income_balance['Short_Term_Liabilities'],
+        'Quick_Ratio': (income_balance['Current_Assets'] - income_balance['Inventory']) / income_balance['Short_Term_Liabilities'],
+        'Cash_Ratio': income_balance['Cash_And_Cash_Equivalents'] / income_balance['Short_Term_Liabilities'],
+
+        # leverage
+        'Debt_Ratio': income_balance['Liabilities'] / income_balance['Total_Assets'],
+        'Debt_To_Equity_Ratio': income_balance['Liabilities'] / income_balance['Owners_Equity'],
+        'Interest_Coverage_Ratio': income_balance['Net_Profit_From_Operating_Activities'] / income_balance['Other_Expenses'],
+
+        # efficiency
+        'Assets_Turnover_Ratio': income_balance['Net_Sales'] / income_balance['Total_Assets'],
+        'Inventory_Turnover_Ratio': income_balance['Cost_Of_Goods_Sold'] / income_balance['Inventory'],
+        'Receivables_Turnover_Ratio': income_balance['Net_Sales'] / income_balance['Short_Term_Account_Receivables'],
+        'Days_Sales_Inventory_Ratio': 365 / (income_balance['Cost_Of_Goods_Sold'] / income_balance['Inventory'])
+    })
+    ratios = pd.concat([meta, ratios], axis=1)
+    return ratios
+
+
 class FSFeatures:
 
     @staticmethod
@@ -347,6 +381,7 @@ class FSFeatures:
         meta = df[meta_cols]
         roll_mean = (
             df
+            .drop(meta_cols[1], axis=1)
             .groupby(meta_cols[0])
             .rolling(window)
             .mean()
@@ -470,41 +505,6 @@ class FSFeatures:
         roll_mean_momentum = pd.concat([meta] + roll_mean_momentum, axis=1)
         return roll_mean_momentum
 
-    @staticmethod
-    def get_ratios(
-        income: pd.DataFrame,
-        balance: pd.DataFrame,
-        meta_cols: list[str] = ['Ticker', 'Feat_Time']
-    ) -> pd.DataFrame:
-        '''Calulate financial ratios from income and balance.'''
-        income_balance = pd.merge(income, balance, on=meta_cols, how='outer')
-        meta = income_balance[meta_cols]
-        ratios = pd.DataFrame({
-            # profitability
-            'Gross_Margin_Ratio': income_balance['Gross_Profit'] / income_balance['Net_Sales'],
-            'Operating_Margin_Ratio': income_balance['Net_Profit_From_Operating_Activities'] / income_balance['Net_Sales'],
-            'Return_On_Equity_Ratio': income_balance['Profit_After_Corporate_Income_Tax'] / income_balance['Owners_Equity'],
-            'Return_On_Assets_Ratio': income_balance['Profit_After_Corporate_Income_Tax'] / income_balance['Total_Assets'],
-
-            # liquidity
-            'Current_Ratio': income_balance['Current_Assets'] / income_balance['Short_Term_Liabilities'],
-            'Quick_Ratio': (income_balance['Current_Assets'] - income_balance['Inventory']) / income_balance['Short_Term_Liabilities'],
-            'Cash_Ratio': income_balance['Cash_And_Cash_Equivalents'] / income_balance['Short_Term_Liabilities'],
-
-            # leverage
-            'Debt_Ratio': income_balance['Liabilities'] / income_balance['Total_Assets'],
-            'Debt_To_Equity_Ratio': income_balance['Liabilities'] / income_balance['Owners_Equity'],
-            'Interest_Coverage_Ratio': income_balance['Net_Profit_From_Operating_Activities'] / income_balance['Other_Expenses'],
-
-            # efficiency
-            'Assets_Turnover_Ratio': income_balance['Net_Sales'] / income_balance['Total_Assets'],
-            'Inventory_Turnover_Ratio': income_balance['Cost_Of_Goods_Sold'] / income_balance['Inventory'],
-            'Receivables_Turnover_Ratio': income_balance['Net_Sales'] / income_balance['Short_Term_Account_Receivables'],
-            'Days_Sales_Inventory_Ratio': 365 / (income_balance['Cost_Of_Goods_Sold'] / income_balance['Inventory'])
-        })
-        ratios = pd.concat([meta, ratios], axis=1)
-        return ratios
-
 
 def get_tickers(folder: str = '../data/excelfull') -> str:
     '''
@@ -538,9 +538,9 @@ if __name__ == '__main__':
     for i, ticker in enumerate(tickers):
         income_i = get_income(ticker)
         income.append(income_i)
-        print(f'{i+1:5}/{len(tickers)} \t ---> Finishing Income {ticker}')
+        print(f'{i+1:5}/{len(tickers)} \t ---> Finish Income {ticker}')
 
-    print('---> Done Income')
+    print('---> Finish Income')
     income = pd.concat(income).reset_index(drop=True)
     income_momen = FSFeatures.calculate_momentum_loop(income)
     income_common = FSFeatures.get_common_size(income, 'Gross_Sale_Revenues')
@@ -551,16 +551,16 @@ if __name__ == '__main__':
     for i, ticker in enumerate(tickers):
         balance_i = get_balance(ticker)
         balance.append(balance_i)
-        print(f'{i+1:5}/{len(tickers)} \t ---> Finishing Balance {ticker}')
+        print(f'{i+1:5}/{len(tickers)} \t ---> Finish Balance {ticker}')
 
-    print('---> Done Balance')
+    print('---> Finish Balance')
     balance = pd.concat(balance).reset_index(drop=True)
     balance_momen = FSFeatures.calculate_momentum_loop(balance)
     balance_common = FSFeatures.get_common_size(balance, 'Total_Assets')
     balance_common_momen = FSFeatures.calculate_momentum_common_loop(balance_common)
 
     # RATIOS
-    ratios = FSFeatures.get_ratios(income, balance)
+    ratios = get_ratios(income, balance)
     ratios_momen = FSFeatures.calculate_momentum_common_loop(ratios)
 
     feature_list = [
